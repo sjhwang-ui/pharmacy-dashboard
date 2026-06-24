@@ -14,41 +14,49 @@ today = datetime.date.today().strftime('%Y-%m-%d')
 
 async def scrape_allthatpay(page):
     print("allthatpay 로그인 시도...")
-    await page.goto('https://scmadm.allthatpay.kr')
-    await page.wait_for_load_state('networkidle')
-    await page.screenshot(path='screenshots/01_allthatpay_login.png', full_page=True)
+    try:
+        await page.goto('https://scmadm.allthatpay.kr', wait_until='domcontentloaded')
+        await asyncio.sleep(2)
+        await page.screenshot(path='screenshots/01_allthatpay_login.png', full_page=True)
 
-    await page.fill('input[type="text"]', ALLTHATPAY_ID)
-    await page.fill('input[type="password"]', ALLTHATPAY_PW)
-    await page.screenshot(path='screenshots/02_allthatpay_filled.png', full_page=True)
+        await page.fill('input[type="text"]', ALLTHATPAY_ID)
+        await page.fill('input[type="password"]', ALLTHATPAY_PW)
+        await page.screenshot(path='screenshots/02_allthatpay_filled.png', full_page=True)
 
-    await page.keyboard.press('Enter')
-    await page.wait_for_load_state('networkidle')
-    await page.screenshot(path='screenshots/03_allthatpay_after_login.png', full_page=True)
+        await page.keyboard.press('Enter')
+        await asyncio.sleep(4)
+        await page.screenshot(path='screenshots/03_allthatpay_after_login.png', full_page=True)
+        print(f"로그인 후 URL: {page.url}")
 
-    await page.goto('https://scmadm.allthatpay.kr/shop/time')
-    await page.wait_for_load_state('networkidle')
-    await page.screenshot(path='screenshots/04_allthatpay_sales.png', full_page=True)
-    print("allthatpay 스크린샷 완료")
+        await asyncio.sleep(2)
+        await page.screenshot(path='screenshots/04_allthatpay_main.png', full_page=True)
+
+    except Exception as e:
+        print(f"allthatpay 에러: {e}")
+        await page.screenshot(path='screenshots/allthatpay_error.png', full_page=True)
 
 async def scrape_gtfetrs(page):
     print("gtfetrs 로그인 시도...")
-    await page.goto('https://merchant.gtfetrs.com')
-    await page.wait_for_load_state('networkidle')
-    await page.screenshot(path='screenshots/05_gtfetrs_login.png', full_page=True)
+    try:
+        await page.goto('https://merchant.gtfetrs.com', wait_until='domcontentloaded')
+        await asyncio.sleep(2)
+        await page.screenshot(path='screenshots/05_gtfetrs_login.png', full_page=True)
 
-    await page.fill('input[type="text"]', GTFETRS_ID)
-    await page.fill('input[type="password"]', GTFETRS_PW)
-    await page.screenshot(path='screenshots/06_gtfetrs_filled.png', full_page=True)
+        await page.fill('input[type="text"]', GTFETRS_ID)
+        await page.fill('input[type="password"]', GTFETRS_PW)
+        await page.screenshot(path='screenshots/06_gtfetrs_filled.png', full_page=True)
 
-    await page.keyboard.press('Enter')
-    await page.wait_for_load_state('networkidle')
-    await page.screenshot(path='screenshots/07_gtfetrs_after_login.png', full_page=True)
+        await page.keyboard.press('Enter')
+        await asyncio.sleep(4)
+        await page.screenshot(path='screenshots/07_gtfetrs_after_login.png', full_page=True)
+        print(f"로그인 후 URL: {page.url}")
 
-    await page.goto('https://merchant.gtfetrs.com/dataSearch/data_search_tab_parent')
-    await page.wait_for_load_state('networkidle')
-    await page.screenshot(path='screenshots/08_gtfetrs_data.png', full_page=True)
-    print("gtfetrs 스크린샷 완료")
+        await asyncio.sleep(2)
+        await page.screenshot(path='screenshots/08_gtfetrs_main.png', full_page=True)
+
+    except Exception as e:
+        print(f"gtfetrs 에러: {e}")
+        await page.screenshot(path='screenshots/gtfetrs_error.png', full_page=True)
 
 async def main():
     os.makedirs('screenshots', exist_ok=True)
@@ -62,7 +70,7 @@ async def main():
 
         await browser.close()
 
-    # 연결 테스트
+    print("스크린샷 완료. 구글시트 연결 테스트...")
     test_data = {
         'type': 'sales',
         'date': today,
