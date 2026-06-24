@@ -42,21 +42,12 @@ def parse_allthatpay(text, date_str):
     }
 
 async def set_date_input(page, index, date_str):
-    await page.evaluate(f"""
-        (function() {{
-            const allInputs = Array.from(document.querySelectorAll('input')).filter(i =>
-                i.offsetParent !== null &&
-                i.type !== 'hidden' && i.type !== 'checkbox' && i.type !== 'radio'
-            );
-            const input = allInputs[{index}];
-            if (!input) return;
-            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-            setter.call(input, '{date_str}');
-            ['input', 'change', 'blur'].forEach(evt =>
-                input.dispatchEvent(new Event(evt, {{bubbles: true}}))
-            );
-        }})();
-    """)
+    # 실제 클릭 + 키보드 입력으로 날짜 설정
+    inputs = page.locator('input:visible').filter(has_not=page.locator('[type=hidden],[type=checkbox],[type=radio],[type=submit],[type=button]'))
+    inp = inputs.nth(index)
+    await inp.click(triple_click=True)
+    await inp.type(date_str, delay=50)
+    await page.keyboard.press('Tab')
     await asyncio.sleep(0.3)
 
 async def scrape_day(page, date_str):
@@ -65,16 +56,7 @@ async def scrape_day(page, date_str):
         await page.goto('https://scmadm.allthatpay.kr/shop/time', wait_until='domcontentloaded')
         await asyncio.sleep(2)
 
-        # 현재 날짜 확인
-        current = await page.evaluate("""
-            Array.from(document.querySelectorAll('input')).filter(i =>
-                i.offsetParent !== null && i.type !== 'hidden' &&
-                i.type !== 'checkbox' && i.type !== 'radio'
-            ).map(i => i.value)
-        """)
-        print(f"    현재 입력값: {current[:3]}")
-
-        # 시작일/종료일 같은 날짜로 설정
+        # 시작일/종료일 키보드로 직접 입력
         await set_date_input(page, 0, date_str)
         await set_date_input(page, 1, date_str)
 
@@ -82,14 +64,14 @@ async def scrape_day(page, date_str):
         await page.click('button:has-text("검색")')
         await asyncio.sleep(3)
 
-        # 날짜 변경됐는지 확인
+        # 현재 입력값 확인
         after = await page.evaluate("""
             Array.from(document.querySelectorAll('input')).filter(i =>
                 i.offsetParent !== null && i.type !== 'hidden' &&
                 i.type !== 'checkbox' && i.type !== 'radio'
             ).map(i => i.value)
         """)
-        print(f"    검색 후 입력값: {after[:3]}")
+        print(f"    날짜 확인: {after[:2]}")
 
         text = await page.inner_text('body')
         data = parse_allthatpay(text, date_str)
