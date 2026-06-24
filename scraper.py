@@ -8,8 +8,8 @@ from playwright.async_api import async_playwright
 APPS_SCRIPT_URL = os.environ['APPS_SCRIPT_URL']
 ALLTHATPAY_ID = os.environ['ALLTHATPAY_ID']
 ALLTHATPAY_PW = os.environ['ALLTHATPAY_PW']
-GTFETRS_ID = os.environ['GTFETRS_ID']
-GTFETRS_PW = os.environ['GTFETRS_PW']
+GTFETRS_ID = os.environ['TAXFREE_ID']
+GTFETRS_PW = os.environ['TAXFREE_PW']
 
 today = datetime.date.today().strftime('%Y-%m-%d')
 

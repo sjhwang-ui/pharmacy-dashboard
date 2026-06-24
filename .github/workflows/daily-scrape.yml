@@ -27,8 +27,8 @@ jobs:
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
           ALLTHATPAY_ID: ${{ secrets.ALLTHATPAY_ID }}
           ALLTHATPAY_PW: ${{ secrets.ALLTHATPAY_PW }}
-          GTFETRS_ID: ${{ secrets.GTFETRS_ID }}
-          GTFETRS_PW: ${{ secrets.GTFETRS_PW }}
+          TAXFREE_ID: ${{ secrets.TAXFREE_ID }}
+          TAXFREE_PW: ${{ secrets.TAXFREE_PW }}
         run: python scraper.py
 
       - name: Upload screenshots
