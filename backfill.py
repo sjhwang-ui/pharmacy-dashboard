@@ -115,6 +115,17 @@ async def main():
         try:
             response = session.get(url, timeout=10)
             data = response.json()
+
+            # 첫 날 응답 구조 출력
+            if date_str == '2026-06-01':
+                print(f"  API 응답 타입: {type(data).__name__}")
+                if isinstance(data, list) and data:
+                    print(f"  첫 행 keys: {list(data[0].keys()) if isinstance(data[0], dict) else data[0]}")
+                elif isinstance(data, dict):
+                    print(f"  응답 keys: {list(data.keys())}")
+                    for k, v in list(data.items())[:5]:
+                        print(f"    {k}: {v}")
+
             result = parse_timelist(data, date_str)
             print(f"  {date_str}: 매출 {result['total_sales']:,}원 / {result['total_units']}건")
 
