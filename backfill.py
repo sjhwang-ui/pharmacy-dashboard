@@ -45,35 +45,55 @@ def parse_allthatpay(text, date_str):
         'best_hour_sales': 0,
     }
 
+async def set_date_input(page, index, date_str):
+    await page.evaluate(f"""
+        (function() {{
+            const allInputs = Array.from(document.querySelectorAll('input')).filter(i =>
+                i.offsetParent !== null &&
+                i.type !== 'hidden' && i.type !== 'checkbox' && i.type !== 'radio'
+            );
+            const input = allInputs[{index}];
+            if (!input) return;
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            setter.call(input, '{date_str}');
+            ['input', 'change', 'blur'].forEach(evt =>
+                input.dispatchEvent(new Event(evt, {{bubbles: true}}))
+            );
+        }})();
+    """)
+    await asyncio.sleep(0.3)
+
 async def scrape_day(page, date_str):
     print(f"  날짜 조회: {date_str}")
     try:
         await page.goto('https://scmadm.allthatpay.kr/shop/time', wait_until='domcontentloaded')
         await asyncio.sleep(2)
 
-        # 날짜 입력 필드 설정
-        date_inputs = page.locator('input[type="date"], input[type="text"][class*="date"], input[placeholder*="날짜"]')
-        count = await date_inputs.count()
+        # 현재 날짜 확인
+        current = await page.evaluate("""
+            Array.from(document.querySelectorAll('input')).filter(i =>
+                i.offsetParent !== null && i.type !== 'hidden' &&
+                i.type !== 'checkbox' && i.type !== 'radio'
+            ).map(i => i.value)
+        """)
+        print(f"    현재 입력값: {current[:3]}")
 
-        if count >= 2:
-            # 시작일, 종료일 모두 같은 날짜로 설정
-            await date_inputs.nth(0).fill(date_str)
-            await date_inputs.nth(1).fill(date_str)
-        elif count == 0:
-            # JS로 날짜 입력 시도
-            await page.evaluate(f"""
-                const inputs = document.querySelectorAll('input');
-                let dateInputs = Array.from(inputs).filter(i =>
-                    i.type === 'date' || (i.value && i.value.match(/\\d{{4}}/)));
-                if (dateInputs.length >= 2) {{
-                    dateInputs[0].value = '{date_str}';
-                    dateInputs[1].value = '{date_str}';
-                }}
-            """)
+        # 시작일/종료일 같은 날짜로 설정
+        await set_date_input(page, 0, date_str)
+        await set_date_input(page, 1, date_str)
 
-        # 검색 버튼 클릭
+        # 검색 클릭
         await page.click('button:has-text("검색")')
         await asyncio.sleep(3)
+
+        # 날짜 변경됐는지 확인
+        after = await page.evaluate("""
+            Array.from(document.querySelectorAll('input')).filter(i =>
+                i.offsetParent !== null && i.type !== 'hidden' &&
+                i.type !== 'checkbox' && i.type !== 'radio'
+            ).map(i => i.value)
+        """)
+        print(f"    검색 후 입력값: {after[:3]}")
 
         text = await page.inner_text('body')
         data = parse_allthatpay(text, date_str)
