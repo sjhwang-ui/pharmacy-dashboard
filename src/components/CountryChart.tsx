@@ -33,7 +33,7 @@ function formatKRW(v: number) {
 }
 
 export default function CountryChart({ taxRefund }: Props) {
-  const [view, setView] = useState<'bar' | 'pie' | 'trend'>('bar')
+  const [view, setView] = useState<'bar' | 'pie' | 'trend'>('trend')
   const [storeFilter, setStoreFilter] = useState<StoreFilter>('전체')
 
   const filtered = storeFilter === '전체' ? taxRefund : taxRefund.filter((t) => t.store === storeFilter)
