@@ -110,10 +110,24 @@ export async function scrapeGtfetrs(store: StoreConfig) {
 
     const records: { date: string; store: string; country: string; amount: number; count: number }[] = []
 
+    // ── 날짜 범위: 30일 전 ~ 어제 ──
+    const endDate = new Date(); endDate.setDate(endDate.getDate() - 1)
+    const startDate = new Date(); startDate.setDate(startDate.getDate() - 30)
+    const startStr = startDate.toISOString().split('T')[0]
+    const endStr = endDate.toISOString().split('T')[0]
+    await frame.evaluate((s) => {
+      const el = document.getElementById('startDay') as HTMLInputElement
+      if (el) { el.value = s; el.dispatchEvent(new Event('change', { bubbles: true })) }
+    }, startStr)
+    await frame.evaluate((e) => {
+      const el = document.getElementById('endDay') as HTMLInputElement
+      if (el) { el.value = e; el.dispatchEvent(new Event('change', { bubbles: true })) }
+    }, endStr)
+    await page.waitForTimeout(300)
+
     // ── 1단계: 기간별 조회 (합계) ──
-    await page.waitForTimeout(2000)
     await clickSearch(frame as Parameters<typeof clickSearch>[0])
-    await page.waitForTimeout(4000)
+    await page.waitForTimeout(5000)
 
     const tableData1 = await frame.evaluate(() =>
       Array.from(document.querySelectorAll('table tr')).map(tr =>
