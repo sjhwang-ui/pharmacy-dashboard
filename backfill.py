@@ -41,37 +41,53 @@ def parse_allthatpay(text, date_str):
         'top_product': top_product,
     }
 
-async def set_date_input(page, index, date_str):
-    inputs = page.locator('input:visible').filter(has_not=page.locator('[type=hidden],[type=checkbox],[type=radio],[type=submit],[type=button]'))
-    inp = inputs.nth(index)
-    await inp.click()
-    await page.keyboard.press('Control+a')
-    await page.keyboard.type(date_str, delay=50)
-    await page.keyboard.press('Tab')
-    await asyncio.sleep(0.3)
-
 async def scrape_day(page, date_str):
     print(f"  날짜 조회: {date_str}")
+
+    # 네트워크 요청 캡처
+    api_requests = []
+    def capture_request(request):
+        if '/api/' in request.url or 'shop' in request.url:
+            api_requests.append({
+                'url': request.url,
+                'method': request.method,
+                'post_data': request.post_data
+            })
+    page.on('request', capture_request)
+
     try:
         await page.goto('https://scmadm.allthatpay.kr/shop/time', wait_until='domcontentloaded')
         await asyncio.sleep(2)
 
-        # 시작일/종료일 키보드로 직접 입력
-        await set_date_input(page, 0, date_str)
-        await set_date_input(page, 1, date_str)
-
-        # 검색 클릭
+        # React native setter + 이벤트
+        await page.evaluate(f"""
+            (function() {{
+                const allInputs = Array.from(document.querySelectorAll('input')).filter(i =>
+                    i.offsetParent !== null && i.type !== 'hidden' &&
+                    i.type !== 'checkbox' && i.type !== 'radio'
+                );
+                const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                [0, 1].forEach(idx => {{
+                    if (allInputs[idx]) {{
+                        setter.call(allInputs[idx], '{date_str}');
+                        ['input', 'change', 'blur'].forEach(evt =>
+                            allInputs[idx].dispatchEvent(new Event(evt, {{bubbles: true}}))
+                        );
+                    }}
+                }});
+            }})();
+        """)
+        await asyncio.sleep(0.5)
         await page.click('button:has-text("검색")')
         await asyncio.sleep(3)
 
-        # 현재 입력값 확인
-        after = await page.evaluate("""
-            Array.from(document.querySelectorAll('input')).filter(i =>
-                i.offsetParent !== null && i.type !== 'hidden' &&
-                i.type !== 'checkbox' && i.type !== 'radio'
-            ).map(i => i.value)
-        """)
-        print(f"    날짜 확인: {after[:2]}")
+        # 캡처된 API 요청 출력 (첫 실행만)
+        if date_str == '2026-06-01' and api_requests:
+            print(f"    API 요청들:")
+            for r in api_requests[:5]:
+                print(f"      {r['method']} {r['url']}")
+                if r['post_data']:
+                    print(f"      body: {r['post_data'][:200]}")
 
         text = await page.inner_text('body')
         data = parse_allthatpay(text, date_str)
