@@ -44,8 +44,9 @@ def parse_allthatpay(text, date_str):
 async def set_date_input(page, index, date_str):
     inputs = page.locator('input:visible').filter(has_not=page.locator('[type=hidden],[type=checkbox],[type=radio],[type=submit],[type=button]'))
     inp = inputs.nth(index)
-    await inp.triple_click()
-    await inp.type(date_str, delay=50)
+    await inp.click()
+    await page.keyboard.press('Control+a')
+    await page.keyboard.type(date_str, delay=50)
     await page.keyboard.press('Tab')
     await asyncio.sleep(0.3)
 
