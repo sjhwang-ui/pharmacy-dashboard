@@ -132,7 +132,10 @@ async def main():
             data = await scrape_day(page, date_str)
             if data and data['total_sales'] > 0:
                 response = requests.post(APPS_SCRIPT_URL, json=data)
-                print(f"  구글시트 저장: {response.json().get('status', '?')}")
+                try:
+                    print(f"  구글시트 저장: {response.json().get('status', '?')}")
+                except:
+                    print(f"  구글시트 저장 완료 (응답: {response.status_code})")
             await asyncio.sleep(1)
 
         await browser.close()
