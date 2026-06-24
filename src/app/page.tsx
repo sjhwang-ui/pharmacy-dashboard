@@ -6,7 +6,9 @@ import DailySalesChart from '@/components/DailySalesChart'
 import CountryChart from '@/components/CountryChart'
 import MetricsTable from '@/components/MetricsTable'
 import DateRangePicker from '@/components/DateRangePicker'
-import { StoreSale, TaxRefundSale } from '@/lib/supabase'
+import PPLPanel from '@/components/PPLPanel'
+import HolidayCalendar from '@/components/HolidayCalendar'
+import { StoreSale, TaxRefundSale, PPLRecord } from '@/lib/supabase'
 
 // 데모 데이터 (Supabase 미설정 시 표시)
 function makeDemoData() {
@@ -43,6 +45,7 @@ export default function Dashboard() {
   const [dateRange, setDateRange] = useState(defaultRange)
   const [storeSales, setStoreSales] = useState<StoreSale[]>([])
   const [taxRefund, setTaxRefund] = useState<TaxRefundSale[]>([])
+  const [pplList, setPplList] = useState<PPLRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [scraping, setScraping] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string>('')
@@ -52,11 +55,15 @@ export default function Dashboard() {
     try {
       const from = dateRange.from.toISOString().split('T')[0]
       const to = dateRange.to.toISOString().split('T')[0]
-      const res = await fetch(`/api/sales?from=${from}&to=${to}`)
-      if (!res.ok) throw new Error('API error')
-      const json = await res.json()
+      const [salesRes, pplRes] = await Promise.all([
+        fetch(`/api/sales?from=${from}&to=${to}`),
+        fetch('/api/ppl'),
+      ])
+      if (!salesRes.ok) throw new Error('API error')
+      const json = await salesRes.json()
       setStoreSales(json.storeSales ?? [])
       setTaxRefund(json.taxRefund ?? [])
+      if (pplRes.ok) setPplList(await pplRes.json())
       setLastUpdated(new Date().toLocaleString('ko-KR'))
     } catch {
       setStoreSales(DEMO_STORE)
@@ -188,11 +195,21 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* 차트 */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <DailySalesChart storeSales={storeSales} taxRefund={taxSummary} />
+            {/* 차트 — 풀폭 스택 */}
+            <div className="grid grid-cols-1 gap-6">
+              <DailySalesChart storeSales={storeSales} taxRefund={taxSummary} pplData={pplList} />
               <CountryChart taxRefund={countryTax} />
             </div>
+
+            {/* 인플루언서 PPL */}
+            <PPLPanel
+              pplList={pplList}
+              onAdd={(r) => setPplList((prev) => [r, ...prev])}
+              onDelete={(id) => setPplList((prev) => prev.filter((p) => p.id !== id))}
+            />
+
+            {/* 명절 캘린더 */}
+            <HolidayCalendar />
 
             {/* 테이블 */}
             <MetricsTable storeSales={storeSales} />
