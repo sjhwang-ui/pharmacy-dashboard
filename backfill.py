@@ -38,11 +38,7 @@ def parse_allthatpay(text, date_str):
         'date': date_str,
         'total_sales': total_sales,
         'total_units': total_units,
-        'total_profit': total_profit,
-        'profit_rate': profit_rate,
         'top_product': top_product,
-        'best_hour': '-',
-        'best_hour_sales': 0,
     }
 
 async def set_date_input(page, index, date_str):
@@ -97,7 +93,7 @@ async def scrape_day(page, date_str):
 
         text = await page.inner_text('body')
         data = parse_allthatpay(text, date_str)
-        print(f"  완료: 매출 {data['total_sales']:,}원")
+        print(f"  완료: 매출 {data['total_sales']:,}원 / 판매수량 {data['total_units']} / 최고상품 {data['top_product'][:15]}")
         return data
 
     except Exception as e:

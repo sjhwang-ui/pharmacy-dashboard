@@ -55,11 +55,7 @@ def parse_allthatpay(text):
         'date': today,
         'total_sales': total_sales,
         'total_units': total_units,
-        'total_profit': total_profit,
-        'profit_rate': profit_rate,
         'top_product': top_product,
-        'best_hour': best_hour,
-        'best_hour_sales': best_amount,
     }
 
 async def scrape_allthatpay(page):
