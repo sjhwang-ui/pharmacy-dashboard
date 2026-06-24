@@ -44,20 +44,30 @@ def parse_allthatpay(text, date_str):
 async def scrape_day(page, date_str):
     print(f"  날짜 조회: {date_str}")
 
-    # 네트워크 요청 캡처
+    # 네트워크 요청 전체 캡처
     api_requests = []
     def capture_request(request):
-        if '/api/' in request.url or 'shop' in request.url:
+        if request.resource_type in ('xhr', 'fetch'):
             api_requests.append({
                 'url': request.url,
                 'method': request.method,
-                'post_data': request.post_data
+                'post_data': request.post_data,
             })
     page.on('request', capture_request)
 
     try:
         await page.goto('https://scmadm.allthatpay.kr/shop/time', wait_until='domcontentloaded')
         await asyncio.sleep(2)
+
+        # 모든 visible input 값 출력 (첫 실행만)
+        if date_str == '2026-06-01':
+            all_inputs = await page.evaluate("""
+                Array.from(document.querySelectorAll('input')).filter(i =>
+                    i.offsetParent !== null && i.type !== 'hidden' &&
+                    i.type !== 'checkbox' && i.type !== 'radio'
+                ).map(i => ({type: i.type, name: i.name, value: i.value, placeholder: i.placeholder}))
+            """)
+            print(f"    입력필드 목록: {all_inputs}")
 
         # React native setter + 이벤트
         await page.evaluate(f"""
@@ -78,16 +88,19 @@ async def scrape_day(page, date_str):
             }})();
         """)
         await asyncio.sleep(0.5)
+
+        # 검색 전 XHR 요청 초기화
+        api_requests.clear()
         await page.click('button:has-text("검색")')
         await asyncio.sleep(3)
 
-        # 캡처된 API 요청 출력 (첫 실행만)
-        if date_str == '2026-06-01' and api_requests:
-            print(f"    API 요청들:")
-            for r in api_requests[:5]:
+        # 첫 날만 XHR 요청 출력
+        if date_str == '2026-06-01':
+            print(f"    XHR/Fetch 요청 ({len(api_requests)}개):")
+            for r in api_requests:
                 print(f"      {r['method']} {r['url']}")
                 if r['post_data']:
-                    print(f"      body: {r['post_data'][:200]}")
+                    print(f"      body: {r['post_data'][:300]}")
 
         text = await page.inner_text('body')
         data = parse_allthatpay(text, date_str)
