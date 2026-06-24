@@ -5,6 +5,7 @@ import KPICard from '@/components/KPICard'
 import DailySalesChart from '@/components/DailySalesChart'
 import CountryChart from '@/components/CountryChart'
 import MetricsTable from '@/components/MetricsTable'
+import DateRangePicker from '@/components/DateRangePicker'
 import { StoreSale, TaxRefundSale } from '@/lib/supabase'
 
 // 데모 데이터 (Supabase 미설정 시 표시)
@@ -31,14 +32,15 @@ function makeDemoData() {
 }
 const { store: DEMO_STORE, tax: DEMO_TAX } = makeDemoData()
 
-const RANGE_OPTIONS = [
-  { label: '7일', value: 7 },
-  { label: '30일', value: 30 },
-  { label: '90일', value: 90 },
-]
+function defaultRange() {
+  const to = new Date()
+  const from = new Date()
+  from.setDate(from.getDate() - 29)
+  return { from, to }
+}
 
 export default function Dashboard() {
-  const [days, setDays] = useState(30)
+  const [dateRange, setDateRange] = useState(defaultRange)
   const [storeSales, setStoreSales] = useState<StoreSale[]>([])
   const [taxRefund, setTaxRefund] = useState<TaxRefundSale[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,7 +50,9 @@ export default function Dashboard() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/sales?days=${days}`)
+      const from = dateRange.from.toISOString().split('T')[0]
+      const to = dateRange.to.toISOString().split('T')[0]
+      const res = await fetch(`/api/sales?from=${from}&to=${to}`)
       if (!res.ok) throw new Error('API error')
       const json = await res.json()
       setStoreSales(json.storeSales ?? [])
@@ -61,7 +65,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }, [days])
+  }, [dateRange])
 
   useEffect(() => {
     fetchData()
@@ -125,21 +129,11 @@ export default function Dashboard() {
             )}
           </div>
           <div className="ml-4 flex shrink-0 items-center gap-3">
-            <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-              {RANGE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setDays(opt.value)}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                    days === opt.value
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            <DateRangePicker
+              from={dateRange.from}
+              to={dateRange.to}
+              onChange={(from, to) => setDateRange({ from, to })}
+            />
             <button
               onClick={handleScrape}
               disabled={scraping}
@@ -189,7 +183,7 @@ export default function Dashboard() {
               <KPICard
                 title="평균 객단가"
                 value={avgOrderValue ? `₩${avgOrderValue.toLocaleString()}` : '-'}
-                sub={`${days}일 평균`}
+                sub={`${Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86400000) + 1}일 평균`}
                 color="orange"
               />
             </div>
