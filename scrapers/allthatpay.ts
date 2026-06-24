@@ -113,37 +113,56 @@ export async function scrapeAllthatpay(store: StoreConfig) {
       }
     }
 
-    // ── 3단계: 매출캘린더(/shop/calen)에서 해당 월 전체 일별 데이터 ──
+    // ── 3단계: 매출캘린더(/shop/calen)에서 최근 3개월 일별 데이터 ──
+    const parseCalenPage = async () => {
+      await page.waitForTimeout(1500)
+      const calenText = await page.innerText('body')
+      const yearMonthMatch = calenText.match(/(\d{4})년\s*(\d{1,2})월/)
+      if (!yearMonthMatch) return null
+
+      const year = yearMonthMatch[1]
+      const month = yearMonthMatch[2].padStart(2, '0')
+      const dayPattern = /(?:^|\n)(\d{1,2})\n합계\n([\d,]+)원 \((\d+)건\)/g
+      let m: RegExpExecArray | null
+      let count = 0
+      while ((m = dayPattern.exec(calenText)) !== null) {
+        const day = String(parseInt(m[1])).padStart(2, '0')
+        const date = `${year}-${month}-${day}`
+        const amount = parseAmount(m[2])
+        const cnt = parseInt(m[3])
+        if (amount > 0) {
+          const existing = records.findIndex(r => r.date === date && r.store === store.name)
+          if (existing >= 0) {
+            records[existing] = { date, store: store.name, amount, count: cnt, avg_order_value: cnt > 0 ? Math.round(amount / cnt) : 0 }
+          } else {
+            records.push({ date, store: store.name, amount, count: cnt, avg_order_value: cnt > 0 ? Math.round(amount / cnt) : 0 })
+          }
+          count++
+        }
+      }
+      console.log(`[올댓페이:${store.name}] 캘린더 ${year}-${month} → ${count}일 파싱`)
+      return `${year}-${month}`
+    }
+
     await page.goto('https://scmadm.allthatpay.kr/shop/calen', { waitUntil: 'networkidle' })
     await page.waitForTimeout(1500)
 
     if (!page.url().includes('login')) {
-      const calenText = await page.innerText('body')
+      // 현재 달 파싱
+      await parseCalenPage()
 
-      // 년/월 추출: "2026년 06월"
-      const yearMonthMatch = calenText.match(/(\d{4})년\s*(\d{2})월/)
-      if (yearMonthMatch) {
-        const year = yearMonthMatch[1]
-        const month = yearMonthMatch[2]
-
-        // 패턴: 일(1~31) → 합계 → 금액원 (건수건)
-        const dayPattern = /(?:^|\n)(\d{1,2})\n합계\n([\d,]+)원 \((\d+)건\)/g
-        let m: RegExpExecArray | null
-        while ((m = dayPattern.exec(calenText)) !== null) {
-          const day = String(parseInt(m[1])).padStart(2, '0')
-          const date = `${year}-${month}-${day}`
-          const amount = parseAmount(m[2])
-          const count = parseInt(m[3])
-          if (amount > 0) {
-            const existing = records.findIndex(r => r.date === date && r.store === store.name)
-            if (existing >= 0) {
-              records[existing] = { date, store: store.name, amount, count, avg_order_value: count > 0 ? Math.round(amount / count) : 0 }
-            } else {
-              records.push({ date, store: store.name, amount, count, avg_order_value: count > 0 ? Math.round(amount / count) : 0 })
-            }
-          }
+      // 이전 달: i.btn_pre 아이콘 버튼 클릭 (최대 2개월 전까지)
+      for (let i = 1; i <= 2; i++) {
+        try {
+          const prevBtn = page.locator('i.btn_pre').first()
+          await prevBtn.click()
+          await page.waitForTimeout(2000)
+          if (page.url().includes('login')) break
+          await parseCalenPage()
+        } catch (e) {
+          console.log(`[올댓페이:${store.name}] 이전 달(${i}) 이동 실패:`, e)
+          break
         }
-        console.log(`[올댓페이:${store.name}] 캘린더 ${year}-${month} 파싱 완료`)
       }
     }
 

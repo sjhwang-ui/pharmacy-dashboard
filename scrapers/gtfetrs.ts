@@ -110,119 +110,144 @@ export async function scrapeGtfetrs(store: StoreConfig) {
 
     const records: { date: string; store: string; country: string; amount: number; count: number }[] = []
 
-    // ── 날짜 범위: 30일 전 ~ 어제 ──
-    const endDate = new Date(); endDate.setDate(endDate.getDate() - 1)
-    const startDate = new Date(); startDate.setDate(startDate.getDate() - 30)
-    const startStr = startDate.toISOString().split('T')[0]
-    const endStr = endDate.toISOString().split('T')[0]
-    await frame.evaluate((s) => {
-      const el = document.getElementById('startDay') as HTMLInputElement
-      if (el) { el.value = s; el.dispatchEvent(new Event('change', { bubbles: true })) }
-    }, startStr)
-    await frame.evaluate((e) => {
-      const el = document.getElementById('endDay') as HTMLInputElement
-      if (el) { el.value = e; el.dispatchEvent(new Event('change', { bubbles: true })) }
-    }, endStr)
-    await page.waitForTimeout(300)
-
-    // ── 1단계: 기간별 조회 (합계) ──
-    await clickSearch(frame as Parameters<typeof clickSearch>[0])
-    await page.waitForTimeout(5000)
-
-    const tableData1 = await frame.evaluate(() =>
-      Array.from(document.querySelectorAll('table tr')).map(tr =>
-        Array.from(tr.querySelectorAll('td,th')).map(td => ({
-          text: (td as HTMLElement).innerText.trim(),
-          colspan: (td as HTMLTableCellElement).colSpan || 1,
-        }))
-      )
-    ) as Cell[][]
-
-    const dates = parseDateRow(tableData1)
-    console.log(`[택스리펀:${store.name}] 기간별 날짜 (${dates.length}개):`, dates)
-
-    if (dates.length > 0) {
-      const amountRow = tableData1.find(r =>
-        r.filter(c => /^[\d,]+$/.test(c.text) && parseAmount(c.text) > 1_000_000).length >= 3
-      )
-      if (amountRow) {
-        const allNums = amountRow.map(c => c.text).filter(t => /^[\d,]+$/.test(t)).map(parseAmount)
-        const dailyAmounts = allNums.filter(n => n > 100_000).slice(0, dates.length)
-        const dailyCounts = allNums.filter(n => n >= 10 && n <= 9999).slice(0, dates.length)
-        dates.forEach((d, i) => {
-          if ((dailyAmounts[i] ?? 0) > 0)
-            records.push({ date: d, store: store.name, country: '합계', amount: dailyAmounts[i], count: dailyCounts[i] ?? 0 })
-        })
-        console.log(`[택스리펀:${store.name}] 기간별 ${records.length}건 파싱`)
-      }
+    // 날짜 범위를 설정하고 조회하는 헬퍼 (30일씩 분할)
+    const setDateRange = async (startStr: string, endStr: string) => {
+      await frame!.evaluate((s) => {
+        const el = document.getElementById('startDay') as HTMLInputElement
+        if (el) { el.value = s; el.dispatchEvent(new Event('change', { bubbles: true })) }
+      }, startStr)
+      await frame!.evaluate((e) => {
+        const el = document.getElementById('endDay') as HTMLInputElement
+        if (el) { el.value = e; el.dispatchEvent(new Event('change', { bubbles: true })) }
+      }, endStr)
+      await page.waitForTimeout(300)
     }
 
-    // ── 2단계: 국적별 조회 ──
-    console.log(`[택스리펀:${store.name}] 국적별 조회 시작...`)
-    await frame.evaluate(() => {
-      const all = Array.from(document.querySelectorAll('*')) as HTMLElement[]
-      const el = all.find(e => e.children.length === 0 && e.innerText?.trim() === '국적별')
-      if (el) el.click()
-    })
-    await page.waitForTimeout(2000)
-    await clickSearch(frame as Parameters<typeof clickSearch>[0])
-    await page.waitForTimeout(4000)
+    // 30일씩 최대 2개 구간 조회 (최근 30일 + 이전 30일)
+    const periods: { startOffset: number; endOffset: number }[] = [
+      { startOffset: 30, endOffset: 1 },
+      { startOffset: 60, endOffset: 31 },
+    ]
 
-    // 행 인덱스 포함해서 추출
-    const tableData2 = await frame.evaluate(() =>
-      Array.from(document.querySelectorAll('table tr')).map((tr, ri) => ({
-        ri,
-        cells: Array.from(tr.querySelectorAll('td,th')).map(td => ({
-          text: (td as HTMLElement).innerText.trim(),
-          colspan: (td as HTMLTableCellElement).colSpan || 1,
-        }))
-      }))
-    ) as { ri: number; cells: Cell[] }[]
+    for (const { startOffset, endOffset } of periods) {
+      const endDate = new Date(); endDate.setDate(endDate.getDate() - endOffset)
+      const startDate = new Date(); startDate.setDate(startDate.getDate() - startOffset)
+      const startStr = startDate.toISOString().split('T')[0]
+      const endStr = endDate.toISOString().split('T')[0]
 
-    const dates2 = parseDateRow(tableData2.map(r => r.cells))
-    console.log(`[택스리펀:${store.name}] 국적별 날짜:`, dates2)
+      await setDateRange(startStr, endStr)
 
-    // 국적별 섹션: '국적' 텍스트가 있는 행 이후만 처리
-    const nationSectionStart = tableData2.findIndex(r => r.cells.some(c => c.text === '국적'))
-    const afterNation = nationSectionStart >= 0 ? tableData2.slice(nationSectionStart) : tableData2
-
-    // 국가명 행: 셀 2개이고 두번째 셀이 국가명 (합계·키워드 제외)
-    const countryRows = afterNation.filter(r =>
-      r.cells.length === 2 && isCountryName(r.cells[1]?.text ?? '')
-    )
-
-    // 금액 행: 국가명 행 이후에 나타나는 수치 행 (날짜 수 이상의 셀, 최소 1개 이상 금액)
-    const lastCountryRi = countryRows.length > 0 ? countryRows[countryRows.length - 1].ri : 0
-    const amountRows = tableData2.filter(r => {
-      if (r.ri <= lastCountryRi) return false
-      if (r.cells.length < 1 + dates2.length) return false
-      const hasLargeAmt = r.cells.slice(1, 1 + dates2.length).some(c => /^[\d,]+$/.test(c.text) && parseAmount(c.text) > 10_000)
-      return hasLargeAmt
-    })
-
-    // 매핑: countryRows[i] ↔ amountRows[i+1] (amountRows[0] = 합계)
-    // '-' 값은 0으로 처리, 위치 기반으로 날짜별 금액 추출
-    const nationRecords: typeof records = []
-    countryRows.forEach((nameRow, i) => {
-      const amtRow = amountRows[i + 1] // 합계 건너뜀
-      if (!amtRow) return
-      const country = nameRow.cells[1].text
-      const dailyAmts = amtRow.cells.slice(1, 1 + dates2.length).map(c =>
-        /^[\d,]+$/.test(c.text) ? parseAmount(c.text) : 0
-      )
-      dates2.forEach((d, di) => {
-        if ((dailyAmts[di] ?? 0) > 0)
-          nationRecords.push({ date: d, store: store.name, country, amount: dailyAmts[di], count: 0 })
+      // ── 1단계: 기간별 조회 (합계) ──
+      // 기간별 탭으로 전환
+      await frame!.evaluate(() => {
+        const all = Array.from(document.querySelectorAll('*')) as HTMLElement[]
+        const el = all.find(e => e.children.length === 0 && e.innerText?.trim() === '기간별')
+        if (el) el.click()
       })
-    })
+      await page.waitForTimeout(500)
+      await clickSearch(frame as Parameters<typeof clickSearch>[0])
+      await page.waitForTimeout(5000)
 
-    console.log(`[택스리펀:${store.name}] 국적별 ${nationRecords.length}건 파싱 (${countryRows.length}개국)`)
+      const tableData1 = await frame!.evaluate(() =>
+        Array.from(document.querySelectorAll('table tr')).map(tr =>
+          Array.from(tr.querySelectorAll('td,th')).map(td => ({
+            text: (td as HTMLElement).innerText.trim(),
+            colspan: (td as HTMLTableCellElement).colSpan || 1,
+          }))
+        )
+      ) as Cell[][]
 
-    const allRecords = [...records, ...nationRecords]
+      const dates = parseDateRow(tableData1)
+      console.log(`[택스리펀:${store.name}] 기간별 날짜 (${dates.length}개) ${startStr}~${endStr}`)
+
+      if (dates.length > 0) {
+        const amountRow = tableData1.find(r =>
+          r.filter(c => /^[\d,]+$/.test(c.text) && parseAmount(c.text) > 1_000_000).length >= 3
+        )
+        if (amountRow) {
+          const allNums = amountRow.map(c => c.text).filter(t => /^[\d,]+$/.test(t)).map(parseAmount)
+          const dailyAmounts = allNums.filter(n => n > 100_000).slice(0, dates.length)
+          const dailyCounts = allNums.filter(n => n >= 10 && n <= 9999).slice(0, dates.length)
+          dates.forEach((d, i) => {
+            if ((dailyAmounts[i] ?? 0) > 0)
+              records.push({ date: d, store: store.name, country: '합계', amount: dailyAmounts[i], count: dailyCounts[i] ?? 0 })
+          })
+          console.log(`[택스리펀:${store.name}] 기간별 ${records.filter(r => r.country === '합계').length}건 누적`)
+        }
+      }
+
+      // ── 2단계: 국적별 조회 ──
+      await frame!.evaluate(() => {
+        const all = Array.from(document.querySelectorAll('*')) as HTMLElement[]
+        const el = all.find(e => e.children.length === 0 && e.innerText?.trim() === '국적별')
+        if (el) el.click()
+      })
+      await page.waitForTimeout(2000)
+      await clickSearch(frame as Parameters<typeof clickSearch>[0])
+      await page.waitForTimeout(4000)
+
+      const tableData2 = await frame!.evaluate(() =>
+        Array.from(document.querySelectorAll('table tr')).map((tr, ri) => ({
+          ri,
+          cells: Array.from(tr.querySelectorAll('td,th')).map(td => ({
+            text: (td as HTMLElement).innerText.trim(),
+            colspan: (td as HTMLTableCellElement).colSpan || 1,
+          }))
+        }))
+      ) as { ri: number; cells: Cell[] }[]
+
+      const dates2 = parseDateRow(tableData2.map(r => r.cells))
+      console.log(`[택스리펀:${store.name}] 국적별 날짜:`, dates2.length, '개')
+
+      const nationSectionStart = tableData2.findIndex(r => r.cells.some(c => c.text === '국적'))
+      const afterNation = nationSectionStart >= 0 ? tableData2.slice(nationSectionStart) : tableData2
+      const countryRows = afterNation.filter(r =>
+        r.cells.length === 2 && isCountryName(r.cells[1]?.text ?? '')
+      )
+      const lastCountryRi = countryRows.length > 0 ? countryRows[countryRows.length - 1].ri : 0
+      const amountRows = tableData2.filter(r => {
+        if (r.ri <= lastCountryRi) return false
+        if (r.cells.length < 1 + dates2.length) return false
+        const hasLargeAmt = r.cells.slice(1, 1 + dates2.length).some(c => /^[\d,]+$/.test(c.text) && parseAmount(c.text) > 10_000)
+        return hasLargeAmt
+      })
+
+      const nationRecordsBatch: typeof records = []
+      countryRows.forEach((nameRow, i) => {
+        const amtRow = amountRows[i + 1]
+        if (!amtRow) return
+        const country = nameRow.cells[1].text
+        const dailyAmts = amtRow.cells.slice(1, 1 + dates2.length).map(c =>
+          /^[\d,]+$/.test(c.text) ? parseAmount(c.text) : 0
+        )
+        dates2.forEach((d, di) => {
+          if ((dailyAmts[di] ?? 0) > 0)
+            nationRecordsBatch.push({ date: d, store: store.name, country, amount: dailyAmts[di], count: 0 })
+        })
+      })
+      records.push(...nationRecordsBatch)
+      console.log(`[택스리펀:${store.name}] 국적별 ${nationRecordsBatch.length}건 추가 (${countryRows.length}개국)`)
+    }
+
+    // 중복 제거 (date+country+store 기준 마지막 값 유지)
+    const dedupMap = new Map<string, typeof records[0]>()
+    for (const r of records) {
+      dedupMap.set(`${r.date}|${r.country}|${r.store}`, r)
+    }
+    const allRecords = Array.from(dedupMap.values())
+    console.log(`[택스리펀:${store.name}] 중복 제거 후 ${allRecords.length}건`)
+
     if (allRecords.length > 0) {
-      const { error } = await supabase.from('tax_refund_sales').upsert(allRecords, { onConflict: 'date,country,store' })
-      if (error) console.error(`[택스리펀:${store.name}] DB 오류:`, error.message)
-      else console.log(`[택스리펀:${store.name}] ✅ 총 ${allRecords.length}건 저장 (합계 ${records.length} + 국적별 ${nationRecords.length})`)
+      // 500건씩 나눠서 저장 (upsert 한 번에 너무 많으면 오류)
+      const chunkSize = 500
+      let saved = 0
+      for (let i = 0; i < allRecords.length; i += chunkSize) {
+        const chunk = allRecords.slice(i, i + chunkSize)
+        const { error } = await supabase.from('tax_refund_sales').upsert(chunk, { onConflict: 'date,country,store' })
+        if (error) { console.error(`[택스리펀:${store.name}] DB 오류:`, error.message); break }
+        saved += chunk.length
+      }
+      console.log(`[택스리펀:${store.name}] ✅ 총 ${saved}건 저장`)
     } else {
       console.log(`[택스리펀:${store.name}] ⚠️ 파싱 실패`)
       await page.screenshot({ path: `logs/gtfetrs_${store.name}_debug.png` })
