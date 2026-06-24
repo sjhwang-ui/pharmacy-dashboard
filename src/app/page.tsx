@@ -198,7 +198,7 @@ export default function Dashboard() {
             {/* 차트 — 풀폭 스택 */}
             <div className="grid grid-cols-1 gap-6">
               <DailySalesChart storeSales={storeSales} taxRefund={taxSummary} pplData={pplList} />
-              <CountryChart taxRefund={countryTax} />
+              <CountryChart taxRefund={countryTax} pplData={pplList} />
             </div>
 
             {/* 인플루언서 PPL */}
