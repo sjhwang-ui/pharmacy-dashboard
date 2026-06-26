@@ -12,11 +12,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { date, name, engagement, note } = body
+  const { date, name, engagement, note, cost } = body
   if (!date || !name) return NextResponse.json({ error: '필수값 누락' }, { status: 400 })
   const { data, error } = await supabase
     .from('influencer_ppl')
-    .insert({ date, name, engagement: engagement ?? 0, note: note ?? null })
+    .insert({ date, name, engagement: engagement ?? 0, note: note ?? null, cost: cost ? Number(cost) : null })
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

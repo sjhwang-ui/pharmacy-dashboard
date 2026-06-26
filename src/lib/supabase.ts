@@ -31,5 +31,6 @@ export type PPLRecord = {
   name: string
   engagement: number
   note: string | null
+  cost: number | null
   created_at: string
 }

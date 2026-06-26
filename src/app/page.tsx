@@ -9,6 +9,8 @@ import DateRangePicker from '@/components/DateRangePicker'
 import PPLPanel from '@/components/PPLPanel'
 import HolidayCalendar from '@/components/HolidayCalendar'
 import AIInsights from '@/components/AIInsights'
+import CountryDayPattern from '@/components/CountryDayPattern'
+import HourlySalesChart from '@/components/HourlySalesChart'
 import { StoreSale, TaxRefundSale, PPLRecord } from '@/lib/supabase'
 
 // 데모 데이터 (Supabase 미설정 시 표시)
@@ -46,10 +48,33 @@ export default function Dashboard() {
   const [dateRange, setDateRange] = useState(defaultRange)
   const [storeSales, setStoreSales] = useState<StoreSale[]>([])
   const [taxRefund, setTaxRefund] = useState<TaxRefundSale[]>([])
+  const [kpiSales, setKpiSales] = useState<{ store: StoreSale[]; tax: TaxRefundSale[] }>({ store: [], tax: [] })
+  const [prevKpiSales, setPrevKpiSales] = useState<{ store: StoreSale[]; tax: TaxRefundSale[] }>({ store: [], tax: [] })
   const [pplList, setPplList] = useState<PPLRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [scraping, setScraping] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string>('')
+
+  // KPI 전용 fetch: 이번달 + 전월 동기간
+  useEffect(() => {
+    const t = new Date()
+    const todayStr = t.toISOString().split('T')[0]
+    const monthStart = todayStr.slice(0, 7) + '-01'
+
+    // 전월 동기간: 전월 1일 ~ 전월의 오늘 날짜
+    const prevMonthLastDay = new Date(t.getFullYear(), t.getMonth(), 0).getDate()
+    const prevDay = Math.min(t.getDate(), prevMonthLastDay)
+    const prevMonthStart = new Date(t.getFullYear(), t.getMonth() - 1, 1).toISOString().split('T')[0]
+    const prevMonthSameDay = new Date(t.getFullYear(), t.getMonth() - 1, prevDay).toISOString().split('T')[0]
+
+    Promise.all([
+      fetch(`/api/sales?from=${monthStart}&to=${todayStr}`).then(r => r.ok ? r.json() : null),
+      fetch(`/api/sales?from=${prevMonthStart}&to=${prevMonthSameDay}`).then(r => r.ok ? r.json() : null),
+    ]).then(([cur, prev]) => {
+      if (cur) setKpiSales({ store: cur.storeSales ?? [], tax: cur.taxRefund ?? [] })
+      if (prev) setPrevKpiSales({ store: prev.storeSales ?? [], tax: prev.taxRefund ?? [] })
+    }).catch(() => {})
+  }, [])
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -91,31 +116,48 @@ export default function Dashboard() {
   const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
   const yesterdayStr = yesterday.toISOString().split('T')[0]
 
-  // 오늘 매장 매출 = 명동+성수 합산
-  const todayStores = storeSales.filter((s) => s.date === today)
+  // 전월 동기 날짜 계산
+  const tDate = new Date(today)
+  const prevMonthLastDay = new Date(tDate.getFullYear(), tDate.getMonth(), 0).getDate()
+  const prevToday = new Date(tDate.getFullYear(), tDate.getMonth() - 1, Math.min(tDate.getDate(), prevMonthLastDay))
+    .toISOString().split('T')[0]
+  const prevYesterday = new Date(tDate.getFullYear(), tDate.getMonth() - 1, Math.min(tDate.getDate() - 1, prevMonthLastDay))
+    .toISOString().split('T')[0]
+
+  function pct(cur: number, prev: number): number | null {
+    if (prev === 0 || cur === 0) return null
+    return ((cur - prev) / prev) * 100
+  }
+
+  // KPI: kpiSales 사용 (dateRange 무관, 항상 이번달 전체)
+  const todayStores = kpiSales.store.filter((s) => s.date === today)
+  const yesterdayStores = kpiSales.store.filter((s) => s.date === yesterdayStr)
   const todayStoreAmount = todayStores.reduce((sum, s) => sum + s.amount, 0)
   const todayStoreCount = todayStores.reduce((sum, s) => sum + s.count, 0)
+  const yesterdayStoreAmount = yesterdayStores.reduce((sum, s) => sum + s.amount, 0)
+  const yesterdayStoreCount = yesterdayStores.reduce((sum, s) => sum + s.count, 0)
 
-  // 오늘 택스리펀 없으면 어제 데이터 사용
-  const todayTax = taxRefund.filter((t) => t.date === today)
-  const yesterdayTax = taxRefund.filter((t) => t.date === yesterdayStr)
-  const activeTax = todayTax.length > 0 ? todayTax : yesterdayTax
-  const activeTaxLabel = todayTax.length > 0 ? '오늘' : '어제'
-  const todayTaxTotal = activeTax.reduce((sum, t) => sum + t.amount, 0)
-  const todayTaxCount = activeTax.reduce((sum, t) => sum + t.count, 0)
+  // 이번달 누적 매출
+  const thisMonthTotal = kpiSales.store.reduce((sum, s) => sum + s.amount, 0)
+  const thisMonthLabel = `${parseInt(today.slice(5, 7))}월 합산`
+
+  // 택스리펀 합계 (kpiSales 기준, '합계' 행만)
+  const kpiTaxSummary = kpiSales.tax.filter((t) => t.country === '합계')
+  const yesterdayTaxTotal = kpiTaxSummary.filter((t) => t.date === yesterdayStr).reduce((sum, t) => sum + t.amount, 0)
+  const yesterdayTaxCount = kpiTaxSummary.filter((t) => t.date === yesterdayStr).reduce((sum, t) => sum + t.count, 0)
+
+  // 전월 동기 비교
+  const prevTodayAmount = prevKpiSales.store.filter((s) => s.date === prevToday).reduce((sum, s) => sum + s.amount, 0)
+  const prevYesterdayAmount = prevKpiSales.store.filter((s) => s.date === prevYesterday).reduce((sum, s) => sum + s.amount, 0)
+  const prevMonthTotal = prevKpiSales.store.reduce((sum, s) => sum + s.amount, 0)
+  const prevTaxSummary = prevKpiSales.tax.filter((t) => t.country === '합계')
+  const prevYesterdayTax = prevTaxSummary.filter((t) => t.date === prevYesterday).reduce((sum, t) => sum + t.amount, 0)
+
+  // 차트용 택스리펀 (dateRange 기준)
+  const taxSummary = taxRefund.filter((t) => t.country === '합계')
 
   // 국가별 (합계 제외)
   const countryTax = taxRefund.filter((t) => t.country !== '합계')
-  const countrySet = new Set(countryTax.map((t) => t.country))
-  const topCountry = Object.entries(
-    countryTax.reduce((acc, t) => {
-      acc[t.country] = (acc[t.country] ?? 0) + t.amount
-      return acc
-    }, {} as Record<string, number>)
-  ).sort((a, b) => b[1] - a[1])[0]
-
-  // 택스리펀 합계 데이터 (일별 추이용)
-  const taxSummary = taxRefund.filter((t) => t.country === '합계')
 
   const avgOrderValue =
     storeSales.length && storeSales.reduce((s, r) => s + r.count, 0) > 0
@@ -173,38 +215,47 @@ export default function Dashboard() {
               <KPICard
                 title="오늘 매장 매출"
                 value={todayStoreAmount ? `₩${todayStoreAmount.toLocaleString()}` : '-'}
-                sub={todayStoreCount ? `${todayStoreCount}건` : '데이터 없음'}
+                sub={todayStoreCount ? `${todayStoreCount}건` : '업데이트 전'}
                 color="blue"
+                change={pct(todayStoreAmount, prevTodayAmount)}
               />
               <KPICard
-                title={`${activeTaxLabel} 택스리펀`}
-                value={todayTaxTotal ? `₩${todayTaxTotal.toLocaleString()}` : '-'}
-                sub={todayTaxCount ? `${todayTaxCount}건` : '데이터 없음'}
+                title="어제 매장 매출"
+                value={yesterdayStoreAmount ? `₩${yesterdayStoreAmount.toLocaleString()}` : '-'}
+                sub={yesterdayStoreCount ? `${yesterdayStoreCount}건` : '데이터 없음'}
+                color="blue"
+                change={pct(yesterdayStoreAmount, prevYesterdayAmount)}
+              />
+              <KPICard
+                title="어제 택스리펀"
+                value={yesterdayTaxTotal ? `₩${yesterdayTaxTotal.toLocaleString()}` : '-'}
+                sub={yesterdayTaxCount ? `${yesterdayTaxCount}건` : '데이터 없음'}
                 color="green"
+                change={pct(yesterdayTaxTotal, prevYesterdayTax)}
               />
               <KPICard
-                title="방문 국가 수"
-                value={countrySet.size ? `${countrySet.size}개국` : '집계 중'}
-                sub={topCountry ? `Top: ${topCountry[0]}` : '국적별 데이터 수집 예정'}
-                color="purple"
-              />
-              <KPICard
-                title="평균 객단가"
-                value={avgOrderValue ? `₩${avgOrderValue.toLocaleString()}` : '-'}
-                sub={`${Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86400000) + 1}일 평균`}
+                title="이번달 누적 매출"
+                value={thisMonthTotal ? `₩${thisMonthTotal.toLocaleString()}` : '-'}
+                sub={thisMonthLabel}
                 color="orange"
+                change={pct(thisMonthTotal, prevMonthTotal)}
               />
             </div>
 
             {/* 차트 — 풀폭 스택 */}
             <div className="grid grid-cols-1 gap-6">
               <DailySalesChart storeSales={storeSales} taxRefund={taxSummary} pplData={pplList} />
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <HourlySalesChart />
+                <CountryDayPattern taxRefund={countryTax} />
+              </div>
               <CountryChart taxRefund={countryTax} pplData={pplList} />
             </div>
 
             {/* 인플루언서 PPL */}
             <PPLPanel
               pplList={pplList}
+              storeSales={storeSales}
               onAdd={(r) => setPplList((prev) => [r, ...prev])}
               onDelete={(id) => setPplList((prev) => prev.filter((p) => p.id !== id))}
             />

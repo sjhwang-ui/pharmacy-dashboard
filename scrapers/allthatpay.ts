@@ -11,16 +11,118 @@ function parseAmount(str: string): number {
   return parseInt(str.replace(/[^0-9]/g, '') || '0')
 }
 
-export async function scrapeAllthatpay(store: StoreConfig) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+async function loginAllthatpay(id: string, pw: string) {
   const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   })
   const page = await context.newPage()
+  await page.goto('https://scmadm.allthatpay.kr/', { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('#id', { timeout: 10000 })
+  await page.locator('#id').fill(id)
+  await page.locator('#pwd').fill(pw)
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'networkidle', timeout: 15000 }).catch(() => {}),
+    page.locator('button:has-text("로그인")').click(),
+  ])
+  await page.waitForTimeout(1500)
+  return { browser, page }
+}
+
+export async function scrapeHourlySales(store: StoreConfig) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const { browser, page } = await loginAllthatpay(store.id, store.pw)
+
+  try {
+    if (page.url().includes('login')) {
+      console.error(`[시간통계:${store.name}] 로그인 실패`)
+      return
+    }
+
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toISOString().split('T')[0]
+
+    await page.goto('https://scmadm.allthatpay.kr/shop/time', { waitUntil: 'networkidle' })
+    await page.waitForTimeout(1500)
+
+    if (page.url().includes('login')) {
+      console.error(`[시간통계:${store.name}] 세션 만료`)
+      return
+    }
+
+    // "어제" 버튼 클릭
+    try {
+      await page.locator('button:has-text("어제"), a:has-text("어제")').first().click()
+      await page.waitForTimeout(800)
+    } catch {
+      console.log(`[시간통계:${store.name}] 어제 버튼 없음, 기본값 사용`)
+    }
+
+    // 검색 버튼 클릭
+    try {
+      await page.locator('button:has-text("검색"), input[value="검색"]').first().click()
+      await page.waitForTimeout(2000)
+    } catch {
+      console.log(`[시간통계:${store.name}] 검색 버튼 없음`)
+    }
+
+    const rows = await page.$$eval('table tr', trs =>
+      trs.map(tr => Array.from(tr.querySelectorAll('td,th')).map(td => (td as HTMLElement).innerText.trim()))
+    )
+
+    const hourlyRecords: { date: string; store: string; hour: number; count: number; amount: number }[] = []
+
+    for (const row of rows) {
+      const cells = row.filter(c => c.trim())
+      // 테이블 구조: [순위, 시간대, 최고판매상품, 품목수, 판매수량, 판매금액, ...]
+      // 순위는 숫자 or "-", 시간대는 2자리 08~23
+      if (cells.length < 4) continue
+      const hourStr = cells[1]
+      if (!hourStr || !/^\d{2}$/.test(hourStr) || parseInt(hourStr) > 23) continue
+      const hour = parseInt(hourStr)
+
+      // 판매금액: "원" 포함 셀 (이익률 % 제외)
+      const amountCell = cells.find(c => c.includes('원') && !c.includes('%'))
+      const amount = amountCell ? parseAmount(amountCell) : 0
+
+      // 판매수량: index 4 (판매금액보다 작은 순수 숫자)
+      const countStr = cells[4]
+      const count = countStr && /^[\d,]+$/.test(countStr) ? parseAmount(countStr) : 0
+
+      if (amount > 0) {
+        hourlyRecords.push({ date: yesterdayStr, store: store.name, hour, count, amount })
+      }
+    }
+
+    // 같은 시간대 중복 제거 (마지막 값 우선)
+    const deduped = Object.values(
+      hourlyRecords.reduce((acc, r) => { acc[r.hour] = r; return acc }, {} as Record<number, typeof hourlyRecords[0]>)
+    )
+
+    console.log(`[시간통계:${store.name}] ${yesterdayStr} → ${deduped.length}개 시간대 파싱`)
+
+    if (deduped.length > 0) {
+      const { error } = await supabase.from('hourly_sales').upsert(deduped, { onConflict: 'date,store,hour' })
+      if (error) console.error(`[시간통계:${store.name}] DB 오류:`, error.message)
+      else console.log(`[시간통계:${store.name}] ✅ ${hourlyRecords.length}건 저장`)
+    }
+  } finally {
+    await browser.close()
+  }
+}
+
+export async function scrapeAllthatpay(store: StoreConfig) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
+  console.log(`[올댓페이:${store.name}] 로그인 중...`)
+  const { browser, page } = await loginAllthatpay(store.id, store.pw)
 
   try {
     const today = new Date()
@@ -28,18 +130,6 @@ export async function scrapeAllthatpay(store: StoreConfig) {
     yesterday.setDate(today.getDate() - 1)
     const todayStr = today.toISOString().split('T')[0]
     const yesterdayStr = yesterday.toISOString().split('T')[0]
-
-    // 로그인
-    console.log(`[올댓페이:${store.name}] 로그인 중...`)
-    await page.goto('https://scmadm.allthatpay.kr/', { waitUntil: 'domcontentloaded' })
-    await page.waitForSelector('#id', { timeout: 10000 })
-    await page.locator('#id').fill(store.id)
-    await page.locator('#pwd').fill(store.pw)
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'networkidle', timeout: 15000 }).catch(() => {}),
-      page.locator('button:has-text("로그인")').click(),
-    ])
-    await page.waitForTimeout(1500)
 
     if (page.url().includes('login')) {
       console.error(`[올댓페이:${store.name}] 로그인 실패`)

@@ -16,6 +16,7 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceArea,
 } from 'recharts'
 import { TaxRefundSale, PPLRecord } from '@/lib/supabase'
 
@@ -35,7 +36,7 @@ function formatKRW(v: number) {
 }
 
 export default function CountryChart({ taxRefund, pplData = [] }: Props) {
-  const [view, setView] = useState<'bar' | 'pie' | 'trend'>('trend')
+  const [view, setView] = useState<'bar' | 'pie' | 'trend' | 'etc'>('trend')
   const [storeFilter, setStoreFilter] = useState<StoreFilter>('전체')
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
 
@@ -50,11 +51,29 @@ export default function CountryChart({ taxRefund, pplData = [] }: Props) {
   const data = Object.entries(byCountry)
     .map(([country, v]) => ({ country, ...v }))
     .sort((a, b) => b.amount - a.amount)
-    .slice(0, 15)
 
   const top6 = data.slice(0, 6).map((d) => d.country)
+  const etcData = data.slice(6) // top6 이후 나머지 국가
+  const etcTotal = { amount: etcData.reduce((s, d) => s + d.amount, 0), count: etcData.reduce((s, d) => s + d.count, 0) }
+
+  // 막대/파이용: top6 + 기타 합산
+  const barData = [
+    ...data.slice(0, 6),
+    ...(etcTotal.amount > 0 ? [{ country: '기타', ...etcTotal }] : []),
+  ]
+
   const allDates = Array.from(new Set(filtered.map((t) => t.date))).sort()
   const allDatesSet = new Set(allDates)
+
+  // 주말 구간 (토~일 쌍)
+  const weekendAreas = allDates.reduce<{ x1: string; x2: string }[]>((acc, date, i) => {
+    const day = new Date(date + 'T00:00:00').getDay() // 0=일, 6=토
+    if (day === 6) {
+      const sun = allDates[i + 1]
+      acc.push({ x1: date.slice(5), x2: sun ? sun.slice(5) : date.slice(5) })
+    }
+    return acc
+  }, [])
 
   const trendData = allDates.map((date) => {
     const row: Record<string, string | number> = { date: date.slice(5) }
@@ -62,8 +81,26 @@ export default function CountryChart({ taxRefund, pplData = [] }: Props) {
       const recs = filtered.filter((t) => t.date === date && t.country === country)
       row[country] = recs.reduce((s, r) => s + r.amount, 0) || 0
     }
+    // 기타: top6 제외 나머지 합산
+    const etcRecs = filtered.filter((t) => t.date === date && !top6.includes(t.country))
+    const etcAmt = etcRecs.reduce((s, r) => s + r.amount, 0)
+    if (etcAmt > 0) row['기타'] = etcAmt
     return row
   })
+
+  // 객단가 데이터 — count가 없으면 날짜 수로 대체
+  const dateCntByCountry: Record<string, number> = {}
+  for (const t of filtered) {
+    dateCntByCountry[t.country] = (dateCntByCountry[t.country] ?? 0) + 1
+  }
+  const avgData = Object.entries(byCountry)
+    .filter(([, v]) => v.amount > 0)
+    .map(([country, v]) => {
+      const cnt = v.count > 0 ? v.count : dateCntByCountry[country] ?? 1
+      return { country, avg: Math.round(v.amount / cnt), amount: v.amount, count: cnt, usedDateCnt: v.count === 0 }
+    })
+    .sort((a, b) => b.avg - a.avg)
+    .slice(0, 15)
 
   const toggleKey = (key: string) => {
     setHiddenKeys(prev => {
@@ -125,7 +162,7 @@ export default function CountryChart({ taxRefund, pplData = [] }: Props) {
             ))}
           </div>
           <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-            {([['bar', '막대'], ['trend', '추이'], ['pie', '파이']] as const).map(([v, label]) => (
+            {([['bar', '막대'], ['trend', '추이'], ['pie', '파이'], ['etc', '기타']] as const).map(([v, label]) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
@@ -141,13 +178,17 @@ export default function CountryChart({ taxRefund, pplData = [] }: Props) {
       </div>
 
       {view === 'bar' && (
-        <ResponsiveContainer width="100%" height={barHeight}>
-          <BarChart data={data} layout="vertical" margin={{ left: 0, right: 16 }}>
+        <ResponsiveContainer width="100%" height={Math.max(240, barData.length * 36)}>
+          <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 16 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
             <XAxis type="number" tickFormatter={formatKRW} tick={{ fontSize: 11 }} />
             <YAxis type="category" dataKey="country" tick={{ fontSize: 11 }} width={70} interval={0} />
             <Tooltip formatter={(v) => `₩${Number(v).toLocaleString()}`} />
-            <Bar dataKey="amount" name="금액" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="amount" name="금액" radius={[0, 4, 4, 0]}>
+              {barData.map((d, i) => (
+                <Cell key={d.country} fill={d.country === '기타' ? '#94a3b8' : COLORS[i % COLORS.length]} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       )}
@@ -173,6 +214,10 @@ export default function CountryChart({ taxRefund, pplData = [] }: Props) {
               )}
             />
 
+            {weekendAreas.map((w) => (
+              <ReferenceArea key={w.x1} x1={w.x1} x2={w.x2} fill="#f1f5f9" fillOpacity={0.8} />
+            ))}
+
             {pplInRange.map((p) => (
               <ReferenceLine
                 key={p.id}
@@ -196,6 +241,19 @@ export default function CountryChart({ taxRefund, pplData = [] }: Props) {
                 hide={hiddenKeys.has(country)}
               />
             ))}
+            {etcTotal.amount > 0 && (
+              <Line
+                key="기타"
+                type="monotone"
+                dataKey="기타"
+                stroke="#94a3b8"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                dot={false}
+                connectNulls
+                hide={hiddenKeys.has('기타')}
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
       )}
@@ -204,7 +262,7 @@ export default function CountryChart({ taxRefund, pplData = [] }: Props) {
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>
             <Pie
-              data={data}
+              data={barData}
               dataKey="amount"
               nameKey="country"
               cx="50%"
@@ -212,14 +270,38 @@ export default function CountryChart({ taxRefund, pplData = [] }: Props) {
               outerRadius={100}
               label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
             >
-              {data.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              {barData.map((d, i) => (
+                <Cell key={i} fill={d.country === '기타' ? '#94a3b8' : COLORS[i % COLORS.length]} />
               ))}
             </Pie>
             <Tooltip formatter={(v) => `₩${Number(v).toLocaleString()}`} />
           </PieChart>
         </ResponsiveContainer>
       )}
+
+      {view === 'etc' && (
+        etcData.length === 0 ? (
+          <p className="text-center text-sm text-gray-400 py-10">데이터 없음</p>
+        ) : (
+          <div>
+            <p className="text-xs text-gray-400 mb-3">Top 6 제외 나머지 {etcData.length}개국</p>
+            <ResponsiveContainer width="100%" height={Math.max(220, etcData.length * 28)}>
+              <BarChart data={etcData} layout="vertical" margin={{ left: 0, right: 60 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                <XAxis type="number" tickFormatter={formatKRW} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="country" tick={{ fontSize: 11 }} width={70} interval={0} />
+                <Tooltip formatter={(v) => `₩${Number(v).toLocaleString()}`} />
+                <Bar dataKey="amount" name="금액" radius={[0, 4, 4, 0]}>
+                  {etcData.map((_, i) => (
+                    <Cell key={i} fill={COLORS[(i + 6) % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )
+      )}
+
     </div>
   )
 }
