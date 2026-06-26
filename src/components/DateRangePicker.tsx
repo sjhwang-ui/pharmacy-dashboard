@@ -67,6 +67,40 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
         <div className="absolute right-0 top-full z-50 mt-2 w-[300px] rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl sm:w-[320px]">
           <p className="mb-1 text-base font-bold text-gray-900">조회 기간을 선택하세요</p>
           <p className="mb-3 text-xs text-gray-400">기간은 최대 1년까지 선택할 수 있어요</p>
+
+          {/* 빠른 선택 버튼 */}
+          <div className="mb-3 flex gap-1.5">
+            {([
+              { label: '오늘', days: 0 },
+              { label: '어제', days: 1 },
+              { label: '일주일', days: 6 },
+              { label: '한달', days: 29 },
+            ] as const).map(({ label: l, days }) => {
+              const t = new Date(); t.setHours(0,0,0,0)
+              const f = new Date(t); f.setDate(f.getDate() - days)
+              const isActive =
+                pending.from?.toDateString() === f.toDateString() &&
+                pending.to?.toDateString() === t.toDateString()
+              return (
+                <button
+                  key={l}
+                  onClick={() => {
+                    setPending({ from: f, to: t })
+                    onChange(f, t)
+                    setOpen(false)
+                  }}
+                  className={`flex-1 rounded-lg py-1.5 text-xs font-medium transition ${
+                    isActive
+                      ? 'bg-yellow-400 text-gray-900'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {l}
+                </button>
+              )
+            })}
+          </div>
+
           <DayPicker
             mode="range"
             selected={pending as { from: Date; to?: Date }}

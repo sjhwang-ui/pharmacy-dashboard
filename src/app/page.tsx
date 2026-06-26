@@ -8,6 +8,7 @@ import MetricsTable from '@/components/MetricsTable'
 import DateRangePicker from '@/components/DateRangePicker'
 import PPLPanel from '@/components/PPLPanel'
 import HolidayCalendar from '@/components/HolidayCalendar'
+import AIInsights from '@/components/AIInsights'
 import { StoreSale, TaxRefundSale, PPLRecord } from '@/lib/supabase'
 
 // 데모 데이터 (Supabase 미설정 시 표시)
@@ -210,6 +211,28 @@ export default function Dashboard() {
 
             {/* 명절 캘린더 */}
             <HolidayCalendar />
+
+            {/* AI 분석 */}
+            {(() => {
+              const to = dateRange.to
+              const curYear = to.getFullYear()
+              const curMonth = to.getMonth() // 0-indexed
+              const currentFrom = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-01`
+              const currentTo = to.toISOString().split('T')[0]
+              const prevYear = curMonth === 0 ? curYear - 1 : curYear
+              const prevMonth = curMonth === 0 ? 12 : curMonth // 1-indexed
+              const prevLastDay = new Date(prevYear, prevMonth, 0).getDate()
+              const prevFrom = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`
+              const prevTo = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${prevLastDay}`
+              return (
+                <AIInsights
+                  currentFrom={currentFrom}
+                  currentTo={currentTo}
+                  prevFrom={prevFrom}
+                  prevTo={prevTo}
+                />
+              )
+            })()}
 
             {/* 테이블 */}
             <MetricsTable storeSales={storeSales} />
