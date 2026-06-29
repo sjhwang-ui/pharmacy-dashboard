@@ -44,6 +44,23 @@ KPI는 dateRange(차트 기간 필터)와 무관하게 항상 이번달 1일~오
 - `scrapers/allthatpay.ts` — `scrapeAllthatpay()` 일별 매출, `scrapeHourlySales()` 시간대별 매출
 - 새로고침 버튼 → `/api/scrape` → `run-all.ts` 실행
 
+## 자동 스크래퍼 (GitHub Actions)
+**맥북 없이 서버에서 매일 자동 실행.** 별도 관리 불필요.
+- 파일: `.github/workflows/daily-scraper.yml`
+- 실행 시간: 매일 오전 9시 KST (UTC 00:00)
+- 실행 로그: https://github.com/shindeokhyeon/pharmacy-dashboard/actions
+- 실패 시 GitHub 계정 이메일로 자동 알림 발송
+
+### 로그인 비밀번호가 바뀌면
+GitHub → Settings → Secrets and variables → Actions → 해당 항목 수정
+```
+GTFETRS_MD_ID / GTFETRS_MD_PW       # gtfetrs 명동
+GTFETRS_SS_ID / GTFETRS_SS_PW       # gtfetrs 성수
+ALLTHATPAY_MD_ID / ALLTHATPAY_MD_PW  # 올댓페이 명동
+ALLTHATPAY_SS_ID / ALLTHATPAY_SS_PW  # 올댓페이 성수
+SUPABASE_URL / SUPABASE_ANON_KEY     # Supabase 접속 정보
+```
+
 ## 환경변수 (.env.local)
 ```
 GTFETRS_MD_ID / GTFETRS_MD_PW       # gtfetrs 명동
@@ -53,12 +70,39 @@ ALLTHATPAY_SS_ID / ALLTHATPAY_SS_PW  # 올댓페이 성수
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 ANTHROPIC_API_KEY                    # AI 분석용, 크레딧 선충전 필요
+SLACK_SIGNING_SECRET                 # Slack 봇 서명 검증
+SLACK_BOT_TOKEN                      # Slack 봇 토큰
 ```
 
+## 슬랙봇
+- 엔드포인트: `src/app/api/slack/route.ts` (Vercel 서버리스)
+- 슬랙 채널에서 `@봇이름 질문` 형태로 사용
+- Claude AI가 Supabase 데이터 조회 후 한국어로 답변
+- 대화 히스토리: Supabase `slack_threads` 테이블에 저장
+- Slack 앱 설정: api.slack.com/apps → 앱 선택 → Event Subscriptions URL: `https://pharmacy-dashboard-iota.vercel.app/api/slack`
+
+## 권한 관리
+| 서비스 | 담당자 | 용도 |
+|---|---|---|
+| GitHub | jsyou, yjlim, sjhwang | 코드 수정, Secrets 관리 |
+| Supabase | jsyou, yjlim, sjhwang | DB 확인 |
+| Vercel | shindeokhyeon (개인 계정) | 배포 (GitHub push로 자동 재배포) |
+| Anthropic | — | AI 분석용 크레딧 충전 필요 |
+
 ## 미완성 / 다음 작업
-- TikTok 3계정 조회수·팔로워 자동 수집 미연동 (차주 목표)
+- TikTok 3계정 조회수·팔로워 자동 수집 미연동
 - 상품별 매출: allthatpay `/shop/prodstat`에서 자동 수집 가능하나 미구현
 - AI 분석: Anthropic 크레딧 소진 시 오류 — console.anthropic.com/settings/billing에서 충전
+
+## 자주 묻는 문제
+**대시보드에 데이터가 안 들어올 때**
+1. GitHub Actions 로그 확인: https://github.com/shindeokhyeon/pharmacy-dashboard/actions
+2. 실패했으면 스크래퍼 오류 메시지 확인
+3. 로그인 비밀번호 바뀐 경우 → GitHub Secrets 업데이트
+
+**슬랙봇이 응답 안 할 때**
+1. Vercel 함수 로그 확인: vercel.com → pharmacy-dashboard → Functions
+2. Anthropic 크레딧 소진 여부 확인
 
 ## 인수인계 문서
 Notion: https://app.notion.com/p/38b12630f2898153904ed6b5abdc2fdb
