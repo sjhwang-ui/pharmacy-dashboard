@@ -9,7 +9,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
+    "@slack/bolt": "^4.7.3",
     "@supabase/supabase-js": "^2.108.2",
+    "@vercel/functions": "^3.7.4",
     "dotenv": "^17.4.2",
     "next": "16.2.9",
     "playwright": "^1.61.1",
