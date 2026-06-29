@@ -104,5 +104,32 @@ SLACK_BOT_TOKEN                      # Slack 봇 토큰
 1. Vercel 함수 로그 확인: vercel.com → pharmacy-dashboard → Functions
 2. Anthropic 크레딧 소진 여부 확인
 
+## 고도화 방법 (Claude Code)
+개발자 없이 말로 기능 추가/수정 가능.
+
+**준비물**
+- Claude Code 설치된 맥북
+- GitHub 계정 (collaborator 권한)
+
+**처음 시작할 때 (최초 1회)**
+```bash
+git clone https://github.com/shindeokhyeon/pharmacy-dashboard.git
+cd pharmacy-dashboard
+npm install
+```
+
+`.env.local` 파일을 프로젝트 폴더에 생성 후 기존 담당자한테 내용 받기.
+
+**매번 작업할 때**
+```bash
+cd pharmacy-dashboard
+claude
+```
+
+Claude Code에 말로 시키면 수정 + GitHub 업로드 + Vercel 배포까지 자동으로 해줌.
+예: "국가별 차트에 필터 기능 추가해줘", "슬랙봇이 영어로도 답하게 해줘"
+
+**구독료:** claude.ai → Pro 플랜 $20/월
+
 ## 인수인계 문서
 Notion: https://app.notion.com/p/38b12630f2898153904ed6b5abdc2fdb
