@@ -1,0 +1,54 @@
+name: 매일 데이터 수집
+
+on:
+  schedule:
+    # 매일 오전 9시 KST (UTC 00:00)
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 수동 실행 버튼
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 패키지 설치
+        run: npm ci
+
+      - name: Playwright 브라우저 설치
+        run: npx playwright install chromium --with-deps
+
+      - name: 스크래퍼 실행
+        env:
+          GTFETRS_MD_ID: ${{ secrets.GTFETRS_MD_ID }}
+          GTFETRS_MD_PW: ${{ secrets.GTFETRS_MD_PW }}
+          GTFETRS_SS_ID: ${{ secrets.GTFETRS_SS_ID }}
+          GTFETRS_SS_PW: ${{ secrets.GTFETRS_SS_PW }}
+          ALLTHATPAY_MD_ID: ${{ secrets.ALLTHATPAY_MD_ID }}
+          ALLTHATPAY_MD_PW: ${{ secrets.ALLTHATPAY_MD_PW }}
+          ALLTHATPAY_SS_ID: ${{ secrets.ALLTHATPAY_SS_ID }}
+          ALLTHATPAY_SS_PW: ${{ secrets.ALLTHATPAY_SS_PW }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: npx tsx scrapers/run-all.ts
+
+      - name: 실패 시 Slack 알림
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "⚠️ 퓨어약국 데이터 수집 실패\n날짜: ${{ github.run_id }}\n확인: https://github.com/${{ github.repository }}/actions"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true
