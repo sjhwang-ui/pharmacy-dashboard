@@ -22,13 +22,15 @@ export async function GET(req: NextRequest) {
       .select('*')
       .gte('date', from)
       .lte('date', to ?? '9999-12-31')
-      .order('date', { ascending: true }),
+      .order('date', { ascending: true })
+      .limit(10000),
     supabase
       .from('store_sales')
       .select('*')
       .gte('date', from)
       .lte('date', to ?? '9999-12-31')
-      .order('date', { ascending: true }),
+      .order('date', { ascending: true })
+      .limit(10000),
   ])
 
   return NextResponse.json({
