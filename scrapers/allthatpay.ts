@@ -81,20 +81,20 @@ export async function scrapeHourlySales(store: StoreConfig) {
 
     for (const row of rows) {
       const cells = row.filter(c => c.trim())
-      // 테이블 구조: [순위, 시간대, 최고판매상품, 품목수, 판매수량, 판매금액, ...]
-      // 순위는 숫자 or "-", 시간대는 2자리 08~23
       if (cells.length < 4) continue
-      const hourStr = cells[1]
-      if (!hourStr || !/^\d{2}$/.test(hourStr) || parseInt(hourStr) > 23) continue
-      const hour = parseInt(hourStr)
+
+      // 시간대 셀을 인덱스 무관하게 찾기 (00~23 형태)
+      const hourCell = cells.find(c => /^\d{2}$/.test(c) && parseInt(c) >= 0 && parseInt(c) <= 23)
+      if (!hourCell) continue
+      const hour = parseInt(hourCell)
 
       // 판매금액: "원" 포함 셀 (이익률 % 제외)
       const amountCell = cells.find(c => c.includes('원') && !c.includes('%'))
       const amount = amountCell ? parseAmount(amountCell) : 0
 
-      // 판매수량: index 4 (판매금액보다 작은 순수 숫자)
-      const countStr = cells[4]
-      const count = countStr && /^[\d,]+$/.test(countStr) ? parseAmount(countStr) : 0
+      // 판매수량: 순수 숫자 셀 중 금액보다 작은 값
+      const numCells = cells.filter(c => /^[\d,]+$/.test(c)).map(parseAmount)
+      const count = numCells.find(n => n < amount && n > 0) ?? 0
 
       if (amount > 0) {
         hourlyRecords.push({ date: yesterdayStr, store: store.name, hour, count, amount })
