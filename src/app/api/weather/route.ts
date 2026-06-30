@@ -24,14 +24,9 @@ export async function GET(req: NextRequest) {
     const json = await res.json()
     const dates: string[] = json.daily?.time ?? []
     const codes: number[] = json.daily?.weather_code ?? []
-    // 최근 3일은 관측값이 아닌 모델 예측값이라 부정확 → 제외
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - 3)
-    const cutoffStr = cutoff.toISOString().split('T')[0]
-
     const result: Record<string, string> = {}
     dates.forEach((d, i) => {
-      if (d <= cutoffStr) result[d] = WMO_TO_EMOJI[codes[i]] ?? '🌡️'
+      result[d] = WMO_TO_EMOJI[codes[i]] ?? '🌡️'
     })
     return NextResponse.json(result)
   } catch {

@@ -43,8 +43,29 @@ void wmoToEmoji // suppress unused warning
 
 // 날씨 이모지가 있는 커스텀 XAxis tick
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function WeatherTick({ x, y, payload, weatherMap }: any) {
+function WeatherTick({ x, y, payload, weatherMap, rotate }: any) {
   const emoji = weatherMap[payload.value] ?? ''
+  if (rotate) {
+    // 날짜 많을 때: 기울여서 표시
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text
+          x={0} y={0} dy={10}
+          textAnchor="end"
+          fill="#6b7280"
+          fontSize={10}
+          transform="rotate(-45)"
+        >
+          {payload.value}
+        </text>
+        {emoji && (
+          <text x={-22} y={0} dy={22} textAnchor="middle" fontSize={11}>
+            {emoji}
+          </text>
+        )}
+      </g>
+    )
+  }
   return (
     <g transform={`translate(${x},${y})`}>
       <text x={0} y={0} dy={12} textAnchor="middle" fill="#6b7280" fontSize={11}>
@@ -165,8 +186,15 @@ export default function DailySalesChart({ storeSales, taxRefund: _taxRefund, ppl
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis
             dataKey="date"
-            height={50}
-            tick={(props) => <WeatherTick {...props} weatherMap={weatherMap} />}
+            interval={0}
+            height={allDates.length > 20 ? 65 : 50}
+            tick={(props) => (
+              <WeatherTick
+                {...props}
+                weatherMap={weatherMap}
+                rotate={allDates.length > 20}
+              />
+            )}
           />
           <YAxis tickFormatter={formatKRW} tick={{ fontSize: 11 }} />
           <Tooltip content={renderTooltip} />
