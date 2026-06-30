@@ -51,7 +51,10 @@ export async function scrapeGtfetrs(store: StoreConfig) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const browser = await chromium.launch({ headless: true })
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+  })
   const page = await browser.newPage()
 
   try {

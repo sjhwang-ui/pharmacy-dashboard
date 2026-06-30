@@ -12,7 +12,10 @@ function parseAmount(str: string): number {
 }
 
 async function loginAllthatpay(id: string, pw: string) {
-  const browser = await chromium.launch({ headless: true })
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+  })
   const context = await browser.newContext({
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   })
