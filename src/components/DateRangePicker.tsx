@@ -75,6 +75,7 @@ export default function DateRangePicker({ from, to, onChange, earliestDate }: Pr
               { label: '오늘', days: 0 },
               { label: '어제', days: 1 },
               { label: '일주일', days: 6 },
+              { label: '2주', days: 13 },
               { label: '한달', days: 29 },
             ] as const).map(({ label: l, days }) => {
               const t = new Date(); t.setHours(0,0,0,0)
