@@ -71,7 +71,12 @@ export default function DailySalesChart({ storeSales, taxRefund: _taxRefund, ppl
     const to = allDates[allDates.length - 1]
     fetch(`/api/weather?from=${from}&to=${to}`)
       .then(r => r.ok ? r.json() : {})
-      .then((data: Record<string, string>) => setWeatherMap(data))
+      .then((data: Record<string, string>) => {
+        // XAxis는 "MM-DD" 형식이므로 키 변환
+        const sliced: Record<string, string> = {}
+        for (const [k, v] of Object.entries(data)) sliced[k.slice(5)] = v
+        setWeatherMap(sliced)
+      })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDates[0], allDates[allDates.length - 1]])
