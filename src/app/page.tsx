@@ -56,6 +56,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [scraping, setScraping] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string>('')
+  const [earliestDate, setEarliestDate] = useState<Date | undefined>(undefined)
+
+  // 데이터 시작일 조회
+  useEffect(() => {
+    fetch('/api/earliest-date').then(r => r.ok ? r.json() : null).then(data => {
+      if (data?.date) setEarliestDate(new Date(data.date))
+    }).catch(() => {})
+  }, [])
 
   // KPI 전용 fetch: 이번달 + 전월 동기간
   useEffect(() => {
@@ -187,6 +195,7 @@ export default function Dashboard() {
               from={dateRange.from}
               to={dateRange.to}
               onChange={(from, to) => setDateRange({ from, to })}
+              earliestDate={earliestDate}
             />
             <button
               onClick={handleScrape}

@@ -11,12 +11,13 @@ type Props = {
   from: Date
   to: Date
   onChange: (from: Date, to: Date) => void
+  earliestDate?: Date
 }
 
 const fmt = (d: Date) =>
   d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
 
-export default function DateRangePicker({ from, to, onChange }: Props) {
+export default function DateRangePicker({ from, to, onChange, earliestDate }: Props) {
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<{ from?: Date; to?: Date }>({ from, to })
   const ref = useRef<HTMLDivElement>(null)
@@ -69,7 +70,7 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
           <p className="mb-3 text-xs text-gray-400">기간은 최대 1년까지 선택할 수 있어요</p>
 
           {/* 빠른 선택 버튼 */}
-          <div className="mb-3 flex gap-1.5">
+          <div className="mb-3 flex flex-wrap gap-1.5">
             {([
               { label: '오늘', days: 0 },
               { label: '어제', days: 1 },
@@ -99,6 +100,29 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
                 </button>
               )
             })}
+            {earliestDate && (() => {
+              const t = new Date(); t.setHours(0,0,0,0)
+              const f = new Date(earliestDate); f.setHours(0,0,0,0)
+              const isActive =
+                pending.from?.toDateString() === f.toDateString() &&
+                pending.to?.toDateString() === t.toDateString()
+              return (
+                <button
+                  onClick={() => {
+                    setPending({ from: f, to: t })
+                    onChange(f, t)
+                    setOpen(false)
+                  }}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                    isActive
+                      ? 'bg-yellow-400 text-gray-900'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  전체
+                </button>
+              )
+            })()}
           </div>
 
           <DayPicker
