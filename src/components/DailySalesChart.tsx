@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   LineChart,
   Line,
@@ -27,10 +27,54 @@ function formatKRW(value: number) {
   return value.toLocaleString()
 }
 
+// 날씨 코드 WMO → 이모지 (서버와 동일 매핑)
+function wmoToEmoji(code: number): string {
+  if (code === 0) return '☀️'
+  if (code <= 2) return '⛅'
+  if (code === 3) return '☁️'
+  if (code <= 48) return '🌫️'
+  if (code <= 67) return '🌧️'
+  if (code <= 77) return '❄️'
+  if (code <= 82) return '🌦️'
+  if (code <= 86) return '🌨️'
+  return '⛈️'
+}
+void wmoToEmoji // suppress unused warning
+
+// 날씨 이모지가 있는 커스텀 XAxis tick
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function WeatherTick({ x, y, payload, weatherMap }: any) {
+  const emoji = weatherMap[payload.value] ?? ''
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={12} textAnchor="middle" fill="#6b7280" fontSize={11}>
+        {payload.value}
+      </text>
+      {emoji && (
+        <text x={0} y={0} dy={26} textAnchor="middle" fontSize={13}>
+          {emoji}
+        </text>
+      )}
+    </g>
+  )
+}
+
 export default function DailySalesChart({ storeSales, taxRefund: _taxRefund, pplData = [] }: Props) {
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
+  const [weatherMap, setWeatherMap] = useState<Record<string, string>>({})
 
   const allDates = Array.from(new Set(storeSales.map((s) => s.date))).sort()
+
+  useEffect(() => {
+    if (allDates.length === 0) return
+    const from = allDates[0]
+    const to = allDates[allDates.length - 1]
+    fetch(`/api/weather?from=${from}&to=${to}`)
+      .then(r => r.ok ? r.json() : {})
+      .then((data: Record<string, string>) => setWeatherMap(data))
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allDates[0], allDates[allDates.length - 1]])
 
   const weekendRanges: { x1: string; x2: string }[] = []
   let satKey: string | null = null
@@ -111,10 +155,14 @@ export default function DailySalesChart({ storeSales, taxRefund: _taxRefund, ppl
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5">
       <h2 className="mb-4 text-base font-semibold text-gray-700">일별 매출 추이</h2>
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={330}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+          <XAxis
+            dataKey="date"
+            height={50}
+            tick={(props) => <WeatherTick {...props} weatherMap={weatherMap} />}
+          />
           <YAxis tickFormatter={formatKRW} tick={{ fontSize: 11 }} />
           <Tooltip content={renderTooltip} />
           <Legend

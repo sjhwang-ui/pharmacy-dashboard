@@ -34,3 +34,17 @@ export type PPLRecord = {
   cost: number | null
   created_at: string
 }
+
+export type OwnedMediaRecord = {
+  id: string
+  platform: '인스타' | '틱톡' | '샤오홍슈'
+  date: string
+  content_note: string | null
+  views: number
+  likes: number
+  saves: number
+  shares: number
+  comments: number
+  cost: number | null
+  created_at: string
+}

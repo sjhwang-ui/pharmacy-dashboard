@@ -7,11 +7,12 @@ import CountryChart from '@/components/CountryChart'
 import MetricsTable from '@/components/MetricsTable'
 import DateRangePicker from '@/components/DateRangePicker'
 import PPLPanel from '@/components/PPLPanel'
+import OwnedMediaPanel from '@/components/OwnedMediaPanel'
 import HolidayCalendar from '@/components/HolidayCalendar'
 import AIInsights from '@/components/AIInsights'
 import CountryDayPattern from '@/components/CountryDayPattern'
 import HourlySalesChart from '@/components/HourlySalesChart'
-import { StoreSale, TaxRefundSale, PPLRecord } from '@/lib/supabase'
+import { StoreSale, TaxRefundSale, PPLRecord, OwnedMediaRecord } from '@/lib/supabase'
 
 // 데모 데이터 (Supabase 미설정 시 표시)
 function makeDemoData() {
@@ -51,6 +52,7 @@ export default function Dashboard() {
   const [kpiSales, setKpiSales] = useState<{ store: StoreSale[]; tax: TaxRefundSale[] }>({ store: [], tax: [] })
   const [prevKpiSales, setPrevKpiSales] = useState<{ store: StoreSale[]; tax: TaxRefundSale[] }>({ store: [], tax: [] })
   const [pplList, setPplList] = useState<PPLRecord[]>([])
+  const [ownedMediaList, setOwnedMediaList] = useState<OwnedMediaRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [scraping, setScraping] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string>('')
@@ -81,15 +83,17 @@ export default function Dashboard() {
     try {
       const from = dateRange.from.toISOString().split('T')[0]
       const to = dateRange.to.toISOString().split('T')[0]
-      const [salesRes, pplRes] = await Promise.all([
+      const [salesRes, pplRes, ownedRes] = await Promise.all([
         fetch(`/api/sales?from=${from}&to=${to}`),
         fetch('/api/ppl'),
+        fetch('/api/owned-media'),
       ])
       if (!salesRes.ok) throw new Error('API error')
       const json = await salesRes.json()
       setStoreSales(json.storeSales ?? [])
       setTaxRefund(json.taxRefund ?? [])
       if (pplRes.ok) setPplList(await pplRes.json())
+      if (ownedRes.ok) setOwnedMediaList(await ownedRes.json())
       setLastUpdated(new Date().toLocaleString('ko-KR'))
     } catch {
       setStoreSales(DEMO_STORE)
@@ -258,6 +262,14 @@ export default function Dashboard() {
               storeSales={storeSales}
               onAdd={(r) => setPplList((prev) => [r, ...prev])}
               onDelete={(id) => setPplList((prev) => prev.filter((p) => p.id !== id))}
+            />
+
+            {/* 온드미디어 성과 */}
+            <OwnedMediaPanel
+              list={ownedMediaList}
+              storeSales={storeSales}
+              onAdd={(r) => setOwnedMediaList((prev) => [r, ...prev])}
+              onDelete={(id) => setOwnedMediaList((prev) => prev.filter((m) => m.id !== id))}
             />
 
             {/* 명절 캘린더 */}
